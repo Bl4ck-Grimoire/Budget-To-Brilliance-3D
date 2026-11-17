@@ -1,0 +1,916 @@
+{
+  "uid": "btb-stream",
+  "title": "Saber 11 — Streaming en tiempo real (replay simulado)",
+  "tags": [
+    "btb",
+    "streaming",
+    "kafka"
+  ],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "graphTooltip": 1,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1s",
+      "5s",
+      "10s",
+      "30s",
+      "1m"
+    ]
+  },
+  "description": "Métricas de streaming calculadas por el consumidor Kafka (stream_* en MySQL).",
+  "templating": {
+    "list": [
+      {
+        "name": "anio",
+        "label": "Año",
+        "type": "query",
+        "datasource": {
+          "type": "mysql",
+          "uid": "btb-mysql"
+        },
+        "refresh": 2,
+        "sort": 2,
+        "includeAll": false,
+        "multi": false,
+        "query": "SELECT DISTINCT anio FROM stream_metricas_departamento ORDER BY anio DESC",
+        "definition": "SELECT DISTINCT anio FROM stream_metricas_departamento ORDER BY anio DESC"
+      },
+      {
+        "name": "bucket_seconds",
+        "label": "Bucket (s)",
+        "type": "constant",
+        "query": "10",
+        "hide": 2,
+        "description": "Debe coincidir con STREAM_BUCKET_SECONDS del consumidor."
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "### Saber 11 — monitor en tiempo real *(replay simulado)*\nLos eventos son **registros históricos** de `fact_resultado_saber11` que el productor reproduce en Kafka (`saber11.result.replayed`). El consumidor valida cada evento con el contrato v1 y actualiza estas métricas en MySQL cada ~1 s; el panel se refresca cada 5 s.  \n**Diferencia con el dashboard histórico (Power BI):** aquel lee el Data Warehouse completo después de cada full refresh del DAG; este lee acumuladores `stream_*` que cambian evento a evento y muestra la salud del flujo. Los valores son **parciales** (muestra del replay): son asociaciones, no causalidad."
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Eventos válidos",
+      "description": "Eventos aplicados a las métricas (sin duplicados ni inválidos).",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT n_validos FROM v_stream_estado"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Eventos inválidos (DLQ)",
+      "description": "Rechazados por el contrato v1; quedan en stream_eventos_invalidos y en el topic DLQ.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 4,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT n_invalidos FROM v_stream_estado"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Duplicados ignorados",
+      "description": "Mismo event_id ya aplicado: no se suma dos veces.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 4,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT n_duplicados FROM v_stream_estado"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Sin datos hace (s)",
+      "description": "Frescura: segundos desde el último micro-lote aplicado. Sube si el consumidor se detiene.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT segundos_sin_datos FROM v_stream_estado"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 15
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "% inválidos",
+      "description": "",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pct_invalidos FROM v_stream_estado"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Latencia media, último minuto (ms)",
+      "description": "Desde event_ts (publicación) hasta que el consumidor aplica el evento.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 20,
+        "y": 4,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT SUM(suma_latencia_ms) / NULLIF(SUM(n_latencia), 0) AS latencia_ms FROM stream_serie_tiempo WHERE bucket_ts >= UTC_TIMESTAMP() - INTERVAL 60 SECOND"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Eventos por segundo (M5)",
+      "description": "Throughput del consumidor por bucket de STREAM_BUCKET_SECONDS.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT bucket_ts AS time, n_validos / $bucket_seconds AS `válidos/s`, n_invalidos / $bucket_seconds AS `inválidos/s`, n_duplicados / $bucket_seconds AS `duplicados/s` FROM stream_serie_tiempo WHERE $__timeFilter(bucket_ts) ORDER BY bucket_ts"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Brechas acumuladas en el tiempo (M2, M3, M4)",
+      "description": "Brechas nacionales acumuladas (puntos del puntaje global): convergen a medida que llegan eventos.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT bucket_ts AS time, brecha_no_oficial_oficial_acum AS `No oficial − oficial (R1)`, brecha_urbano_rural_acum AS `Urbano − rural (R3)`, brecha_genero_global_acum AS `Hombres − mujeres, global (R5)` FROM stream_serie_tiempo WHERE $__timeFilter(bucket_ts) ORDER BY bucket_ts"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "auto",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 10,
+      "type": "barchart",
+      "title": "Puntaje global medio por departamento (M1)",
+      "description": "Excluye validantes (depto 00) y puntajes sospechosos, como R4/R6.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT nombre_departamento AS departamento, prom_global AS `Puntaje global medio` FROM v_stream_departamento WHERE anio = $anio AND n_score > 0 ORDER BY prom_global DESC"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "xField": "departamento",
+        "showValue": "auto",
+        "barWidth": 0.8,
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": 0,
+        "stacking": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 11,
+      "type": "barchart",
+      "title": "Brecha de género por asignatura, M − F (M4 · R5)",
+      "description": "Puntaje global y las 5 asignaturas (lectura crítica, matemáticas, sociales y ciudadanas, ciencias naturales, inglés).",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT medida AS asignatura, brecha_m_menos_f AS `Hombres − mujeres` FROM v_stream_genero_nacional WHERE anio = $anio ORDER BY medida"
+        }
+      ],
+      "options": {
+        "orientation": "vertical",
+        "xField": "asignatura",
+        "showValue": "auto",
+        "barWidth": 0.8,
+        "legend": {
+          "showLegend": true,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        },
+        "xTickLabelRotation": 0,
+        "stacking": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "type": "table",
+      "title": "Brechas por departamento (M2 · M3)",
+      "description": "Con pocos eventos por departamento las brechas son ruidosas: mire N.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 22,
+        "w": 12,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT nombre_departamento AS Departamento, n_score AS `N con puntaje`, brecha_no_oficial_oficial AS `No oficial − oficial`, brecha_urbano_rural AS `Urbano − rural` FROM v_stream_departamento WHERE anio = $anio AND n_score > 0 ORDER BY n_score DESC"
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 13,
+      "type": "xychart",
+      "title": "Puntaje vs deserción por departamento (M6 · R6)",
+      "description": "Deserción: API del MEN (snapshot de fact_indicador_departamento). Puntaje: acumulado en streaming.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT nombre_departamento AS departamento, desercion_media, prom_global AS `Puntaje global medio` FROM v_stream_riesgo WHERE anio = $anio"
+        }
+      ],
+      "options": {
+        "mapping": "auto",
+        "seriesMapping": "auto",
+        "dims": {
+          "x": "desercion_media"
+        },
+        "legend": {
+          "showLegend": false,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 9
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 14,
+      "type": "xychart",
+      "title": "Puntaje vs repitencia por departamento (M7 · R7)",
+      "description": "Repitencia en secundaria: API del MEN. Puntaje: acumulado en streaming.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT nombre_departamento AS departamento, repitencia_secundaria, prom_global AS `Puntaje global medio` FROM v_stream_riesgo WHERE anio = $anio"
+        }
+      ],
+      "options": {
+        "mapping": "auto",
+        "seriesMapping": "auto",
+        "dims": {
+          "x": "repitencia_secundaria"
+        },
+        "legend": {
+          "showLegend": false,
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "show": "points",
+            "pointSize": {
+              "fixed": 9
+            }
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 15,
+      "type": "table",
+      "title": "Cuadrantes de riesgo (M6 · M7)",
+      "description": "Umbral = promedio de los departamentos del mismo año con datos hasta el momento.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 37,
+        "w": 16,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT nombre_departamento AS Departamento, n_score AS N, prom_global AS `Puntaje medio`, desercion_media AS `Deserción %`, cuadrante_desercion AS `Cuadrante deserción`, repitencia_secundaria AS `Repitencia %`, cuadrante_repitencia AS `Cuadrante repitencia` FROM v_stream_riesgo WHERE anio = $anio ORDER BY desercion_media DESC"
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 16,
+      "type": "table",
+      "title": "Spearman por año (M6 · M7)",
+      "description": "Misma aproximación del batch (RANK sin corrección de empates).",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 37,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT anio AS Año, n_departamentos AS Deptos, spearman_desercion_vs_puntaje AS `ρ deserción`, spearman_repitencia_vs_puntaje AS `ρ repitencia` FROM v_stream_spearman ORDER BY anio"
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    },
+    {
+      "id": 17,
+      "type": "table",
+      "title": "Últimos eventos rechazados (contrato v1)",
+      "description": "Auditoría de la validación: cada rechazo guarda el motivo y su posición en Kafka.",
+      "datasource": {
+        "type": "mysql",
+        "uid": "btb-mysql"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 41,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "mysql",
+            "uid": "btb-mysql"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT recibido_en AS `Recibido (UTC)`, kafka_partition AS `Partición`, kafka_offset AS `Offset`, motivo AS `Motivo` FROM stream_eventos_invalidos ORDER BY recibido_en DESC LIMIT 10"
+        }
+      ],
+      "options": {},
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      }
+    }
+  ]
+}

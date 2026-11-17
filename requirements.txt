@@ -1,0 +1,12 @@
+# Versions below are the ones the pipeline was tested with (Python 3.12).
+polars==2.0.0
+great-expectations==1.24.0
+pandas==3.0.2          # required by Great Expectations (Polars frames are converted just before validation)
+pyarrow==26.0.0        # required by Polars -> pandas conversion
+numpy==2.4.4
+requests==2.33.1
+confluent-kafka==2.16.1    # Kafka client (librdkafka wheel included)
+pydantic==2.14.3           # event contract
+PyMySQL==1.2.3             # same driver as the batch pipeline
+cryptography==48.0.0       # PyMySQL needs it for MySQL 8 caching_sha2_password (Airflow's image already ships it)
+python-dotenv==1.2.2       # src/config.py loads .env

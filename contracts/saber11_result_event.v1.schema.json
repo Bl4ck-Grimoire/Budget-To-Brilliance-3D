@@ -1,0 +1,155 @@
+{
+  "additionalProperties": false,
+  "description": "Contract v1. All scores are REQUIRED (decision of the team: the source always reports them).",
+  "properties": {
+    "event_id": {
+      "description": "UUIDv5 of 'estu_consecutivo|periodo'",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "event_type": {
+      "const": "saber11.result.replayed",
+      "title": "Event Type",
+      "type": "string"
+    },
+    "event_version": {
+      "const": 1,
+      "title": "Event Version",
+      "type": "integer"
+    },
+    "event_ts": {
+      "description": "UTC timestamp of publication (ISO-8601)",
+      "format": "date-time",
+      "title": "Event Ts",
+      "type": "string"
+    },
+    "cod_dane_depto": {
+      "description": "Event key: 2-digit DANE code, '00' = validante",
+      "pattern": "^\\d{2}$",
+      "title": "Cod Dane Depto",
+      "type": "string"
+    },
+    "estu_consecutivo": {
+      "maxLength": 30,
+      "minLength": 1,
+      "title": "Estu Consecutivo",
+      "type": "string"
+    },
+    "periodo": {
+      "pattern": "^\\d{4}-[12]$",
+      "title": "Periodo",
+      "type": "string"
+    },
+    "cole_naturaleza": {
+      "enum": [
+        "OFICIAL",
+        "NO OFICIAL",
+        "No aplica"
+      ],
+      "title": "Cole Naturaleza",
+      "type": "string"
+    },
+    "cole_jornada": {
+      "enum": [
+        "COMPLETA",
+        "UNICA",
+        "MAÑANA",
+        "TARDE",
+        "NOCHE",
+        "SABATINA",
+        "No aplica"
+      ],
+      "title": "Cole Jornada",
+      "type": "string"
+    },
+    "cole_area_ubicacion": {
+      "enum": [
+        "URBANO",
+        "RURAL",
+        "No aplica"
+      ],
+      "title": "Cole Area Ubicacion",
+      "type": "string"
+    },
+    "estu_genero": {
+      "enum": [
+        "F",
+        "M",
+        "No informado"
+      ],
+      "title": "Estu Genero",
+      "type": "string"
+    },
+    "punt_lectura_critica": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Punt Lectura Critica",
+      "type": "number"
+    },
+    "punt_matematicas": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Punt Matematicas",
+      "type": "number"
+    },
+    "punt_sociales_ciudadanas": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Punt Sociales Ciudadanas",
+      "type": "number"
+    },
+    "punt_c_naturales": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Punt C Naturales",
+      "type": "number"
+    },
+    "punt_ingles": {
+      "maximum": 100,
+      "minimum": 0,
+      "title": "Punt Ingles",
+      "type": "number"
+    },
+    "punt_global": {
+      "maximum": 500,
+      "minimum": 0,
+      "title": "Punt Global",
+      "type": "number"
+    },
+    "puntaje_sospechoso": {
+      "title": "Puntaje Sospechoso",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "event_id",
+    "event_type",
+    "event_version",
+    "event_ts",
+    "cod_dane_depto",
+    "estu_consecutivo",
+    "periodo",
+    "cole_naturaleza",
+    "cole_jornada",
+    "cole_area_ubicacion",
+    "estu_genero",
+    "punt_lectura_critica",
+    "punt_matematicas",
+    "punt_sociales_ciudadanas",
+    "punt_c_naturales",
+    "punt_ingles",
+    "punt_global",
+    "puntaje_sospechoso"
+  ],
+  "title": "Saber11ResultEvent v1",
+  "type": "object",
+  "$id": "https://github.com/budget-to-brilliance/contracts/saber11_result_event.v1",
+  "x-event-key": "cod_dane_depto",
+  "x-semantic-rules": [
+    "DQ-21: cod_dane_depto in the 33 DANE codes or '00'",
+    "DQ-07: puntaje_sospechoso == (punt_global == 0)",
+    "DQ-11: cole_naturaleza == 'No aplica' <=> cod_dane_depto == '00'",
+    "event_ts must include a timezone"
+  ]
+}

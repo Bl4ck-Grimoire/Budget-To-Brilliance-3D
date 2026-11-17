@@ -1,0 +1,7 @@
+# Streaming component (producer, consumer, init). Tested with Python 3.12.
+# The batch/Airflow dependencies stay in requirements.txt (unchanged from the Second Delivery).
+confluent-kafka==2.16.1    # Kafka client (librdkafka wheel included)
+pydantic==2.14.3           # event contract
+PyMySQL==1.2.3             # same driver as the batch pipeline
+cryptography==48.0.0       # PyMySQL needs it for MySQL 8 caching_sha2_password (Airflow's image already ships it)
+python-dotenv==1.2.2       # src/config.py loads .env

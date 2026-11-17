@@ -1,0 +1,279 @@
+# Final Delivery - local environment.
+#   BATCH (unchanged from the Second Delivery): Airflow 3.1.8 (LocalExecutor) + MySQL 8 Data Warehouse.
+#   STREAMING (new): Kafka (KRaft, single broker) + consumer + Grafana real-time dashboard.
+#
+#   docker compose build
+#   docker compose up -d                 # Airflow http://localhost:8080 | Grafana http://localhost:3000
+#   docker compose up -d mysql           # only the Data Warehouse (to run the scripts by hand)
+#   docker compose --profile tools up -d kafka-ui      # optional Kafka UI: http://localhost:8081
+#   docker compose run --rm stream-producer --period 2024-2 --rate 20   # replay (simulation)
+#
+# Databases: postgres = Airflow metadata | mysql = the Data Warehouse AND the stream_* tables.
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: btb-airflow:3.1.8
+  user: "${AIRFLOW_UID:-50000}:0"
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/project/dags
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    # The same secrets must reach every Airflow component, otherwise tasks cannot authenticate
+    # against the API server. Change them in .env for anything that is not a local test.
+    AIRFLOW__API_AUTH__JWT_SECRET: ${AIRFLOW_JWT_SECRET:-local-only-jwt-secret-change-me-0123456789}
+    AIRFLOW__API__SECRET_KEY: ${AIRFLOW_API_SECRET_KEY:-local-only-api-secret-change-me-0123456789}
+    # Local convenience: no login screen. Do NOT expose this port to a network.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+    # --- the pipeline (src/config.py reads these) ---
+    PYTHONPATH: /opt/airflow/project
+    DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-changeme}@mysql:3306/icfes_dw
+    MYSQL_DATABASE: ${MYSQL_DATABASE:-icfes_dw}
+    ICFES_SOURCE_DIR: /opt/airflow/project/data/source/icfes
+    MEN_API_URL: ${MEN_API_URL:-https://www.datos.gov.co/resource/ji8i-4anb.json}
+    SOCRATA_APP_TOKEN: ${SOCRATA_APP_TOKEN:-}
+    MEN_MIN_YEAR_EXCLUSIVE: ${MEN_MIN_YEAR_EXCLUSIVE:-2021}
+    COLEGIO_ATTR_POLICY: ${COLEGIO_ATTR_POLICY:-first}
+    DUPLICATE_CONFLICT_POLICY: ${DUPLICATE_CONFLICT_POLICY:-block}
+  volumes:
+    - ./:/opt/airflow/project
+    - ./logs:/opt/airflow/logs
+  depends_on: &airflow-depends-on
+    postgres:
+      condition: service_healthy
+    mysql:
+      condition: service_healthy
+
+# Python services of the streaming component (init, consumer, producer). The repository is mounted at /app.
+x-stream-common: &stream-common
+  build:
+    context: .
+    dockerfile: Dockerfile.streaming
+  image: btb-streaming:1.0
+  working_dir: /app
+  volumes:
+    - ./:/app
+  environment:
+    PYTHONPATH: /app
+    DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:-changeme}@mysql:3306/icfes_dw
+    MYSQL_DATABASE: ${MYSQL_DATABASE:-icfes_dw}
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092          # internal listener (from the host use localhost:9092)
+    KAFKA_TOPIC_RESULTS: ${KAFKA_TOPIC_RESULTS:-saber11.resultados.v1}
+    KAFKA_TOPIC_DLQ: ${KAFKA_TOPIC_DLQ:-saber11.resultados.dlq.v1}
+    KAFKA_CONSUMER_GROUP: ${KAFKA_CONSUMER_GROUP:-btb-stream-metrics}
+    STREAM_MAX_BATCH: ${STREAM_MAX_BATCH:-200}
+    STREAM_FLUSH_SECONDS: ${STREAM_FLUSH_SECONDS:-1}
+    STREAM_BUCKET_SECONDS: ${STREAM_BUCKET_SECONDS:-10}
+    STREAM_REFERENCE_REFRESH_SECONDS: ${STREAM_REFERENCE_REFRESH_SECONDS:-300}
+    GRAFANA_DB_USER: ${GRAFANA_DB_USER:-grafana_ro}
+    GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-grafana_ro_local}
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: btb_airflow_postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mysql:
+    image: mysql:8.0
+    container_name: btb_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-changeme}
+      MYSQL_DATABASE: icfes_dw
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${MYSQL_ROOT_PASSWORD:-changeme}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  airflow-init:
+    <<: *airflow-common
+    container_name: btb_airflow_init
+    entrypoint: /bin/bash
+    command: ["-c", "mkdir -p /opt/airflow/logs && airflow db migrate"]
+    depends_on: *airflow-depends-on
+    restart: "no"
+
+  airflow-apiserver:
+    <<: *airflow-common
+    container_name: btb_airflow_apiserver
+    command: api-server
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/api/v2/version"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    depends_on:
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: btb_airflow_scheduler
+    command: scheduler
+    depends_on:
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: btb_airflow_dag_processor
+    command: dag-processor
+    depends_on:
+      <<: *airflow-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # ======================================================================= STREAMING
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: btb_kafka
+    # KRaft (no ZooKeeper), one node = broker + controller. Two listeners: containers talk to
+    # kafka:29092, programs on your machine (producer run from the host) to localhost:9092.
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"      # topics are declared explicitly in kafka-init
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9092:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+    restart: unless-stopped
+
+  kafka-init:
+    image: apache/kafka:3.9.0
+    container_name: btb_kafka_init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        T=/opt/kafka/bin/kafka-topics.sh
+        B=kafka:29092
+        $$T --bootstrap-server $$B --create --if-not-exists --topic $${KAFKA_TOPIC_RESULTS} \
+            --partitions 3 --replication-factor 1 --config retention.ms=604800000
+        $$T --bootstrap-server $$B --create --if-not-exists --topic $${KAFKA_TOPIC_DLQ} \
+            --partitions 1 --replication-factor 1 --config retention.ms=2592000000
+        $$T --bootstrap-server $$B --describe --topic $${KAFKA_TOPIC_RESULTS}
+    environment:
+      KAFKA_TOPIC_RESULTS: ${KAFKA_TOPIC_RESULTS:-saber11.resultados.v1}
+      KAFKA_TOPIC_DLQ: ${KAFKA_TOPIC_DLQ:-saber11.resultados.dlq.v1}
+    restart: "no"
+
+  kafka-ui:                      # optional (profile "tools"): inspect topics, messages, consumer lag
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: btb_kafka_ui
+    profiles: ["tools"]
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+
+  stream-init:                   # creates stream_* tables/views + the read-only account used by Grafana
+    <<: *stream-common
+    container_name: btb_stream_init
+    command: ["python", "-m", "src.streaming.init_db"]
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  stream-consumer:
+    <<: *stream-common
+    container_name: btb_stream_consumer
+    command: ["python", "-m", "src.streaming.consumer"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      stream-init:
+        condition: service_completed_successfully
+    restart: unless-stopped      # on a MySQL failure the consumer exits without committing offsets and resumes after restart
+
+  stream-producer:               # on demand: docker compose run --rm stream-producer --period 2024-2 --rate 20
+    <<: *stream-common
+    container_name: btb_stream_producer
+    profiles: ["demo"]
+    entrypoint: ["python", "-m", "src.streaming.producer"]
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+    restart: "no"
+
+  grafana:
+    image: grafana/grafana-oss:11.4.0
+    container_name: btb_grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_DASHBOARDS_MIN_REFRESH_INTERVAL: 1s
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/streaming.json
+      GRAFANA_DB_USER: ${GRAFANA_DB_USER:-grafana_ro}
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-grafana_ro_local}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      stream-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  mysql_data:
+  kafka_data:
+  grafana_data:

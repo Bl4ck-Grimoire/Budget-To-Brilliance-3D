@@ -1,0 +1,20 @@
+# Grafana reads the streaming views with a READ-ONLY MySQL account (created by stream-init).
+# ${...} are expanded by Grafana from its environment (docker-compose / .env): no secret in Git.
+apiVersion: 1
+datasources:
+  - name: BTB Streaming MySQL
+    uid: btb-mysql
+    type: mysql
+    access: proxy
+    url: mysql:3306
+    user: ${GRAFANA_DB_USER}
+    isDefault: true
+    editable: false
+    jsonData:
+      database: icfes_dw
+      maxOpenConns: 5
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      timezone: "+00:00"
+    secureJsonData:
+      password: ${GRAFANA_DB_PASSWORD}

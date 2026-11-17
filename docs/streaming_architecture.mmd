@@ -1,0 +1,28 @@
+flowchart TD
+    subgraph SRC["Fuentes (sin cambios respecto a la 2D)"]
+        S1["ICFES Saber 11<br/>9 periodos · 3.29M filas"]
+        S2["API MEN (Socrata)<br/>deserción y repitencia"]
+    end
+    subgraph BATCH["BATCH · Airflow 3.1.8"]
+        A["extract → transform/integrate<br/>→ Great Expectations (3 gates) → load"]
+    end
+    DW[("MySQL 8 · icfes_dw<br/>fact_resultado_saber11<br/>fact_indicador_departamento + dims")]
+    PBI["Dashboard histórico<br/>Power BI (R1–R7)"]
+    subgraph STREAM["STREAMING · Kafka (KRaft)"]
+        P["Producer Python<br/>replay simulado"]
+        T[["saber11.resultados.v1<br/>3 particiones · clave cod_dane_depto"]]
+        C["Consumer Python<br/>contrato v1 + métricas"]
+        D[["saber11.resultados.dlq.v1"]]
+    end
+    ST[("MySQL · stream_*<br/>acumuladores + vistas v_stream_*")]
+    G["Dashboard tiempo real<br/>Grafana (refresh 5 s)"]
+    S1 --> A
+    S2 --> A
+    A --> DW
+    DW --> PBI
+    DW -->|"lee hechos (muestra determinista)"| P
+    P --> T --> C
+    C -->|inválidos| D
+    C -->|"transacción + commit manual"| ST
+    DW -.->|"snapshot de indicadores MEN"| C
+    ST --> G
