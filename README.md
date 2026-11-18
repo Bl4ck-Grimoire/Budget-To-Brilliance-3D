@@ -1,11 +1,5 @@
 # Budget To Brilliance  Final Delivery (Batch + Streaming)
 
-**ETL Course (G01) · Data Engineering and Artificial Intelligence · Universidad Autónoma de Occidente**
-
-An integrated, reproducible data system around SDG 4 (Quality Education) in Colombia: a batch ETL
-(Airflow + Great Expectations + MySQL Data Warehouse + Power BI) extended with a streaming component
-(Kafka producer/consumer with an event contract, live metrics in MySQL, Grafana real-time dashboard).
-
 | Delivery | Repository | Status |
 |---|---|---|
 | First (1D) | https://github.com/Johann0811/Budget-To-Brilliance<br>https://github.com/Bl4ck-Grimoire/Budget-To-Brilliance | unchanged |
