@@ -1,22 +1,17 @@
-# Budget To Brilliance — Final Delivery (Batch + Streaming)
+# Budget To Brilliance  Final Delivery (Batch + Streaming)
 
 **ETL Course (G01) · Data Engineering and Artificial Intelligence · Universidad Autónoma de Occidente**
 
-An integrated, reproducible data system around **SDG 4 (Quality Education) in Colombia**: a batch ETL
-(Airflow + Great Expectations + MySQL Data Warehouse + Power BI) extended with a **streaming component**
+An integrated, reproducible data system around SDG 4 (Quality Education) in Colombia: a batch ETL
+(Airflow + Great Expectations + MySQL Data Warehouse + Power BI) extended with a streaming component
 (Kafka producer/consumer with an event contract, live metrics in MySQL, Grafana real-time dashboard).
 
 | Delivery | Repository | Status |
 |---|---|---|
-| First (1D) | https://github.com/Johann0811/Budget-To-Brilliance | unchanged |
-| Second (2D) | https://github.com/Bl4ck-Grimoire/Budget-To-Brilliance-2D | unchanged |
-| **Final (this repo)** | batch reused from 2D + **new streaming component** | this repository |
+| First (1D) | https://github.com/Johann0811/Budget-To-Brilliance<br>https://github.com/Bl4ck-Grimoire/Budget-To-Brilliance | unchanged |
+| Second (2D) | https://github.com/Johann0811/Budget-To-Brilliance-2D<br>https://github.com/Bl4ck-Grimoire/Budget-To-Brilliance-2D | unchanged |
+| Final (this repo) | https://github.com/Johann0811/Budget-To-Brilliance-3D<br>https://github.com/Bl4ck-Grimoire/Budget-To-Brilliance-3D | New |
 
-> **What is new in this delivery:** everything under `src/streaming/`, `contracts/`, `grafana/`,
-> `sql/schema/create_streaming.sql`, `tests/`, `scripts/`, `Dockerfile.streaming` and the Kafka/Grafana
-> services of `docker-compose.yaml`. The batch pipeline (`dags/`, `src/{extract,transform,integrate,validation,load}`,
-> `gx/`, `sql/schema/create_dw.sql`, `sql/analytics/`) is the Second Delivery **unchanged**; its full documentation is kept in
-> [`docs/batch/README_2D.md`](docs/batch/README_2D.md).
 
 ## Table of contents
 
@@ -39,37 +34,56 @@ An integrated, reproducible data system around **SDG 4 (Quality Education) in Co
 ## 1. Project Overview and Objectives
 
 ### 1.1 Problem
-Standardized results (ICFES **Saber 11**) are usually read in isolation from the trajectory of the students who never reach the
-exam. Saber 11 only observes students who persisted to the end of secondary education (**survivorship bias**), while the
-Ministry of Education (**MEN**) publishes departmental dropout and repetition rates with no link to learning outcomes. The
-project integrates both sources to monitor gaps (school sector, urban/rural, department, gender) and the relationship between
-performance and school trajectory.
+Standardized results (ICFES Saber 11) are usually read in isolation from the trajectory of the students who never reach the exam. Saber 11 only observes students who persisted to the end of secondary education (survivorship bias), while the Ministry of Education (MEN) publishes departmental dropout and repetition rates with no link to learning outcomes. The project integrates both sources to monitor gaps (school sector, urban/rural, department, gender) and the relationship between performance and school trajectory.
 
-### 1.2 Refined objectives
+### 1.2 Objectives
 
-| ID | Objective | Type | Where it is met |
-|---|---|---|---|
-| O1 | Extract ICFES files and the MEN API automatically and reproducibly | Batch | §4 (Airflow DAG) |
-| O2 | Guarantee quality with 3 Great Expectations gates; critical failures never reach the DW | Batch | §5 |
-| O3 | Load a dimensional model (fact constellation) in MySQL | Batch | §6 |
-| O4 | Answer R1–R7 historically from the validated DW | Batch | §7 |
-| **O5** | **Process result events with low latency, validating them against an explicit contract** | **Streaming** | §8 |
-| **O6** | **Keep live gap, quality and risk metrics (R1, R3, R5, R6, R7) updated as events arrive** | **Streaming** | §8, §9 |
-| **O7** | **Show the behaviour of the stream under invalid events and consumer interruption** | **Streaming** | §8.7, §11 |
+General objective: Integrate ICFES Saber 11 with the MEN trajectory indicators in an automated, validated and reproducible data, system that answers the analytical requirements R1–R7 historically (batch) and keeps their key gaps, and the health of the data flow, observable within seconds (streaming).
 
-### 1.3 Analytical requirements
+The objectives are the system goals; the analytical questions they must answer are the requirements of 1.3.
 
-R1–R7 are exactly those of the Second Delivery (R1 official vs. non-official gap · R2 school shift · R3 urban–rural by department ·
-R4 departmental ranking · R5 gender gap, global **and by subject** · R6 dropout vs. score · R7 repetition vs. score). Details in
-[`docs/batch/README_2D.md`](docs/batch/README_2D.md#4-new-integrated-analytical-requirements-r6-and-r7).
+| ID | Objective | Type | Requirements served | Where it is met |
+|---|---|---|---|---|
+| O1 | Extract the ICFES files and the MEN API automatically and reproducibly | Batch | R1–R7 | [Batch ETL Pipeline](#4-batch-etl-pipeline) |
+| O2 | Guarantee quality with 3 Great Expectations gates; critical failures never reach the DW | Batch | R1–R7 | [Data Quality](#5-data-quality) |
+| O3 | Load a dimensional model (fact constellation) in MySQL | Batch | R1–R7 | [Data Warehouse](#6-data-warehouse) |
+| O4 | Answer R1–R7 historically from the validated DW | Batch | R1–R7 | [Batch Analytical Dashboard](#7-batch-analytical-dashboard) |
+| O5 | Process result events with low latency, validating each one against an explicit contract | Streaming | SR3 | [Streaming Pipeline](#8-streaming-pipeline) |
+| O6 | Keep live gap, quality and risk metrics updated as events arrive | Streaming | R1, R3, R4, R5, R6, R7 (via M1–M7) | [Streaming Pipeline](#8-streaming-pipeline) and [Real-Time Dashboard](#9-real-time-dashboard) |
+| O7 | Show the behaviour of the stream under invalid events and consumer interruption | Streaming | SR3 | [Behaviour with an invalid event and with an interrupted consumer](#87-behaviour-with-an-invalid-event-and-with-an-interrupted-consumer) and [Functional Evidence](#11-functional-evidence) |
 
-### 1.4 Batch vs. streaming requirements
+### 1.3 Analytical requirements 
+
+These are the requirements defined in the First Delivery (R1–R5), maintained or refined in the Second Delivery, which added R6 and R7
+full definitions and integration strategy: ([README_2D](docs/batch/README_2D.md#3-status-and-changes-for-r1r5) · Sections 3 and 4.)
+
+| ID | Requirement | Changes | Which insight does the data deliver? | How the objective was achieved |
+|---|---|---|---|---|
+| **R1** | Official vs. non-official school gap in the global score (excludes examinees without a school) | None | Non-official-school students score higher on average than official-school students in every period; the gap narrowed from 31.1 pts (2021-2) to 26.8 pts (2025-2) (1D finding). A descriptive association, not causality. | **Batch:** Power BI page 1 and `analytical_queries.sql` over the validated DW. **Live:** M2 keeps the gap updated as events arrive. |
+| **R2** | Score gap by school shift (*jornada*) within sector | None | Full-day (`COMPLETA`) and single-shift (`UNICA`, within official schools) lead; night and Saturday shifts lag in both sectors, roughly 40–90 pts below (1D finding). | **Batch:** Power BI page 1. **Live:** not monitored (batch only). |
+| **R3** | Urban–rural gap by department (top 10 largest gaps) | None | The departments with the widest urban–rural gaps (e.g. San Andrés, La Guajira, Guainía, Amazonas) are largely the same ones that rank lowest overall (1D finding). | **Batch:** Power BI page 1. **Live:** M3, national and by department. |
+| **R4** | Departmental performance ranking across periods | None | Boyacá, Santander, Bogotá, Cundinamarca, Quindío and Norte de Santander lead (~266–273 pts); Chocó, Vaupés, Vichada, Guainía and Amazonas lag (~210–221) (1D finding). | **Batch:** Power BI page 2. **Live:** M1, mean global score by department. |
+| **R5** | Gender gap (M−F) in the global score and the subjects | None | Male students score higher than female students in every period (~7.03 pts on average) and in several subjects, although there are more female examinees (1D finding). | **Batch:** Power BI page 2 and `analytical_queries.sql` by subject area. **Live:** M4 in the global score and the 5 subjects. |
+| **R6** | Upper-secondary dropout (MEN API) vs. Saber 11 score, by department and year | None | Whether departments with higher dropout also score lower: the link the exam alone cannot show, because it only observes students who persisted (survivorship bias). Association, not causality. | **Batch:** Power BI page 3 and SQL (per-year Spearman) on the integrated department × year panel (99 observations). **Live:** M6. |
+| **R7** | Secondary repetition (MEN API) vs. Saber 11 score, by department and year | None | Whether higher secondary repetition goes with lower scores at department level. Association, not causality. | **Batch:** Power BI page 3. **Live:** M7. |
+
+(1D finding) = documented in the First Delivery README (R1-R5) computed on the same ICFES data.
+R6 and R7 are the requirements that integrate both sources: neither the ICFES file nor the MEN API can answer them alone.
+
+### 1.4 Expected outcomes
+* A Data Warehouse loaded only with data that passed the critical quality gates, reproducible from a clean checkout.
+* Historical answers to R1–R7 (Power BI over the DW) and the evidence that bad data stops the pipeline.
+* A streaming pipeline that validates every event against a contract, never loses or double-counts an event, and updates seven live metrics (M1–M7).
+* A real-time dashboard that visibly changes when new events are published, distinct from the historical one.
+* Documented behaviour and limits of the stream under an invalid event and under a stopped consumer.
+
+### 1.5 Batch vs. streaming requirements
 
 | | **Batch (historical)** | **Streaming (low latency)** |
 |---|---|---|
-| Question | How large were the gaps over 2021-2…2025-2? | How are the gaps and the quality of the flow evolving *as results arrive*? |
+| Question | How large were the gaps over 2021-2…2025-2? | How are the gaps and the quality of the flow evolving as results arrive? |
 | Data | Full DW (3.29M exam attempts, 99 department-year indicators) | Records replayed from the DW fact table, one event per exam attempt |
-| Freshness | Hours (after each manual full refresh of the DAG) | Seconds (consumer ≤ 1 s + dashboard refresh 5 s) |
+| Freshness | only after each manual refresh of the DAG | Automatically (consumer ≤ 1 s + dashboard refresh 5 s) |
 | Quality control | 28 rules in 3 gates over whole batches | Event contract per message + invalid-event queue |
 | Tool | Power BI over MySQL | Grafana over `stream_*` tables |
 
@@ -80,23 +94,27 @@ R4 departmental ranking · R5 gender gap, global **and by subject** · R6 dropou
 | SR3 | Watch the health of the stream: invalid, duplicates, throughput, latency, freshness | quality (DQ-05/07/21) |
 | SR4 | Place each department live against the MEN dropout and repetition rates | R6, R7 |
 
-### 1.5 Why streaming adds value (honest justification)
-Saber 11 is historical data: nothing here *needs* sub-second latency, and the replay is a **simulation**. The value is operational and
-is realistic for the moment ICFES publishes a results release: (a) a spike of suspicious (zero) scores or malformed events is
-detected within seconds instead of after the next full refresh of ~3.3M rows; (b) provisional gaps are visible while the release is
-still being ingested; (c) a stalled ingestion is visible immediately (freshness indicator). The architecture also shows the
+### 1.6 Why streaming adds value
+Saber 11 is historical data: nothing here actually needs sub-second latency, and the replay is a simulation. The value is operational and is realistic for the moment ICFES publishes a results release: a spike of suspicious (zero) scores or malformed events is detected within seconds instead of after the next full refresh of ~3.3M rows, provisional gaps are visible while the release is still being ingested and/or a stalled ingestion is visible immediately (freshness indicator). The architecture also shows the
 pattern that would be used if the source were truly continuous.
 
-### 1.6 Are the objectives met?
-Traceability of each objective to its evidence is in §11. Batch objectives (O1–O4) are evidenced by the Second Delivery runs (Airflow
-screenshots included below). Streaming objectives (O5–O7) are verified by **62 automated tests** (§11.2); the screenshots of the
-full live system must be captured by the team following §11.3.
+### 1.7 Are the objectives met?
+| Objective / requirement | Evidence | Status |
+|---|---|---|
+| O1, O2, O3 (batch ETL, gates, DW) | Airflow runs, controlled critical failure, safe re-run ([11.1 Batch (Second Delivery runs, reused pipeline)](#111-batch-second-delivery-runs-reused-pipeline)) | Evidenced (2D runs, pipeline reused unchanged) |
+| O4 · R1, R2, R3, R4, R5, R6 | Power BI pages ([7. Batch Analytical Dashboard](#7-batch-analytical-dashboard)) | Evidenced (batch dashboard) |
+| O4 · R7 | `analytical_queries.sql` and live metric M7 | Evidenced (batch dashboard) |
+| O5 (contract and low-latency processing) | Contract + 62 automated tests ([11.2 Streaming: automated verification (executed during construction)](#112-streaming-automated-verification-executed-during-construction)) | Verified by tests. |
+| O6 · M1–M7 | Dashboard queries tested against the consumer's data ([11.2 Streaming: automated verification (executed during construction)](#112-streaming-automated-verification-executed-during-construction)) | Verified by tests. |
+| O7 (invalid event, consumer stopped) | `scripts/demo_experiments.sh`, behaviour tested ([11.2 Streaming: automated verification (executed during construction)](#112-streaming-automated-verification-executed-during-construction)) | Verified by tests. |
+
+
 
 ---
 
 ## 2. Data Sources and EDA
 
-### 2.1 Sources (as in the Second Delivery)
+### 2.1 Sources (Unchanged)
 
 | Source | Type | Content | Volume |
 |---|---|---|---|
@@ -104,20 +122,15 @@ full live system must be captured by the team following §11.3.
 | **MEN API** (Socrata dataset `ji8i-4anb`) | Dynamic source, REST API | Departmental dropout (`desercion_media`) and repetition (`repitencia_secundaria`) per year | 462 raw rows (2011–2024) → 99 used (33 departments × 2022–2024) |
 
 The heavy files (`.txt` datasets and the Power BI `.pbix`) are hosted in Kaggle because of GitHub's size limit:
-https://www.kaggle.com/datasets/blackgrimoire/budget-to-brilliance — place the nine `Examen_Saber_11_<period>.txt` files in
-`data/source/icfes/`.
+https://www.kaggle.com/datasets/blackgrimoire/budget-to-brilliance  place the nine `Examen_Saber_11_<period>.txt` files in
+`data/source/icfes/` before executing the project.
 
-**The API stays a batch source.** It is extracted periodically by the Airflow DAG (paginated, retried, validated by Gate 1b). It is
-**not ignored by the streaming component**: the MEN indicators loaded into `fact_indicador_departamento` are copied by the consumer to a
-reference snapshot and joined with the live score accumulators (metrics M6/M7, §8.5). Streaming events themselves come from the ICFES
-fact table (§8.1).
-
-### 2.2 EDA / profiling findings (full detail: [README_2D §8](docs/batch/README_2D.md#8-data-profiling-findings))
+### 2.2 EDA / profiling findings (full detail: [README_2D](docs/batch/README_2D.md#8-data-profiling-findings))
 
 | Finding | Effect on cleaning / transformation / quality rule |
 |---|---|
 | 5 delimiters and 3 encodings across the ICFES files | Streaming ingestion with Polars, per-period manifest (DQ-03, DQ-04) |
-| 451,150 examinees (13.73%) with no school code = *validantes* | Mapped to `id_colegio = -1` / `id_departamento = -1`, kept in the fact, excluded from school comparisons and departmental correlations (DQ-11) |
+| 451,150 examinees (13.73%) with no school code = validantes | Mapped to `id_colegio = -1` / `id_departamento = -1`, kept in the fact, excluded from school comparisons and departmental correlations (DQ-11) |
 | 81 spellings of department names | Normalised to the 33 DANE codes (T-06, DQ-26) |
 | `URBANA` and `URBANO` for the same area | Harmonised (T-07, DQ-09) |
 | 28 records with `punt_global = 0` | Flagged `puntaje_sospechoso`, excluded from KPIs (DQ-07) |
@@ -125,9 +138,9 @@ fact table (§8.1).
 | 7 defective MEN columns (100% null or copies of others) | Column whitelist (T-03, DQ-23) |
 | MEN codes without zero padding (`'5'` instead of `'05'`) | Padded to DANE format (DQ-21) |
 
-**How the EDA reaches the streaming component.** The event contract reuses the batch rules instead of inventing new ones: score ranges
+**How the EDA reaches the streaming component:** The event contract reuses the batch rules instead of inventing new ones: score ranges
 (DQ-05), `puntaje_sospechoso ⇔ punt_global = 0` (DQ-07), DANE department domain (DQ-21), `No aplica ⇔ department '00'` (DQ-11), the closed
-domains of sector/shift/area (DQ-09/10), and the metric eligibility rules (suspicious scores, *validantes* and unreported gender are
+domains of sector/shift/area (DQ-09/10), and the metric eligibility rules (suspicious scores, validantes and unreported gender are
 excluded exactly like in R1–R7).
 
 ---
@@ -136,7 +149,7 @@ excluded exactly like in R1–R7).
 
 ```mermaid
 flowchart TD
-    subgraph SRC["Sources (unchanged from 2D)"]
+    subgraph SRC["Sources (unchanged)"]
         S1["ICFES Saber 11<br/>9 periods · 3.29M rows"]
         S2["MEN API (Socrata)<br/>dropout and repetition"]
     end
@@ -166,15 +179,13 @@ flowchart TD
 ```
 (Same diagram in [`docs/streaming_architecture.mmd`](docs/streaming_architecture.mmd).)
 
-The architecture follows the recommended Figure 1 of the assignment with two adaptations: (1) the *Streaming Metrics Store* is a set of
-`stream_*` tables in the **same MySQL server** as the DW (one less component, still isolated by prefix, no foreign keys and a
-read-only account for Grafana); (2) a **dead-letter topic** receives the rejected events.
+The architecture follows the recomendation show in the docuemnt of the assignment with two adaptations: the Streaming Metrics Store is a set of `stream_*` tables in the same MySQL server as the DW (one less component, still isolated by prefix, no foreign keys and a read-only account for Grafana) and a dead-letter topic receives the rejected events.
 
 | Layer | Technology | Purpose |
 |---|---|---|
 | Orchestration | Apache Airflow 3.1.8 | Schedule and monitor the batch ETL |
 | Event streaming | Apache Kafka 3.9 (KRaft, single broker) | Publish, retain and distribute events |
-| Data sources | ICFES `.txt` files, MEN Socrata API | Historical and periodically updated data |
+| Data sources | ICFES .txt files, MEN Socrata API | Historical and periodically updated data |
 | Data storage | MySQL 8.0 (`icfes_dw`) | Dimensional model **and** processed streaming data |
 | Quality | Great Expectations 1.24.0 · Pydantic 2 (event contract) | Batch gates · per-event validation |
 | Transformation | Python (Polars/Pandas in batch) | Clean, integrate and transform |
@@ -186,7 +197,7 @@ read-only account for Grafana); (2) a **dead-letter topic** receives the rejecte
 ## 4. Batch ETL Pipeline
 
 Reused unchanged from the Second Delivery (`dags/budget_to_brilliance_dag.py`, DAG id `budget_to_brilliance_etl`, TaskFlow API).
-Complete description: [README_2D §16–17](docs/batch/README_2D.md#16-airflow-dag-design-and-task-interfaces).
+Complete description: [README_2D](docs/batch/README_2D.md#16-airflow-dag-design-and-task-interfaces).
 
 | Step | Task(s) | What happens |
 |---|---|---|
@@ -200,11 +211,9 @@ Complete description: [README_2D §16–17](docs/batch/README_2D.md#16-airflow-d
 | Audit | `reconcile_dw` | Row counts against prepared data + 7 integrity queries |
 
 Configuration: `schedule=None` (manual trigger; ICFES publishes semi-annually and MEN annually), `max_active_runs=1`,
-`dagrun_timeout=3h`. Retries: 3 for transient network/API faults, 2 for transient DB faults, **0 for deterministic data or contract failures**.
+`dagrun_timeout=3h`. Retries: 3 for transient network/API faults, 2 for transient DB faults, 0 for deterministic data or contract failures.
 
-**Interaction with the streaming component:** the load does a *full refresh* (it empties the DW tables). The streaming tables are not
-part of that refresh and have no foreign keys to the DW, so the refresh can never block on them or wipe them (verified by tests,
-§11.2). While the DW is empty, the consumer keeps its previous MEN snapshot.
+Interaction with the streaming component: the load does a full refresh (it empties the DW tables). The streaming tables are not part of that refresh and have no foreign keys to the DW, so the refresh can never block on them or wipe them (verified by tests). While the DW is empty, the consumer keeps its previous MEN snapshot.
 
 ---
 
@@ -212,8 +221,7 @@ part of that refresh and have no foreign keys to the DW, so the refresh can neve
 
 ### 5.1 Batch: Great Expectations
 
-Three gates and **28 traceable rules** (`DQ-01 … DQ-30`) defined once in `src/validation/dq_rules.py`; each expectation carries its
-`dq_rule_id` and severity in its metadata; results are serialised to `data/runs/<batch_id>/validation/<gate>.json`.
+Three gates and 28 traceable rules (`DQ-01 … DQ-30`) defined once in `src/validation/dq_rules.py`; each expectation carries its `dq_rule_id` and severity in its metadata; results are serialised to `data/runs/<batch_id>/validation/<gate>.json`. Complete listing and explanation of DQ rules: [README_2D](docs/batch/README_2D.md#92-complete-data-quality-rules-catalog)
 
 | Gate | When | Rules (examples) |
 |---|---|---|
@@ -227,14 +235,10 @@ Three gates and **28 traceable rules** (`DQ-01 … DQ-30`) defined once in `src/
 | Warning | Logged in the evidence JSON, execution continues |
 | Informational | Recorded for monitoring only |
 
-**Expected behaviour when a critical check fails:** the task fails **in Airflow** (red task, visible in Grid/Graph), no retries
-(deterministic failure), and nothing reaches the DW tables. It was demonstrated in the Second Delivery by injecting an out-of-domain
-department code (`'999'`) into the API batch (Reliability Test B, screenshots in §11.1).
+**Expected behaviour when a critical check fails:** the task fails in Airflow (red task, visible in Grid/Graph), no retries (deterministic failure), and nothing reaches the DW tables. It was demonstrated in the Second Delivery by injecting an out-of-domain department code (`'999'`) into the API batch (Reliability Test).
 
 ### 5.2 Streaming: event contract and invalid-event queue
-Every event is validated by the consumer against contract v1 (§8.3). An invalid event **never stops the stream**: it is stored in
-`stream_eventos_invalidos` (with reason and Kafka position), forwarded to the DLQ topic, and counted in the *Invalid* indicator of the
-dashboard. The same `'999'` department defect used in Test B is one of the injectable invalid events, which links both levels of quality control.
+Every event is validated by the consumer against contract v1. An invalid event never stops the stream: it is stored in `stream_eventos_invalidos` (with reason and Kafka position), forwarded to the DLQ topic, and counted in the Invalid indicator of the dashboard. The same `'999'` department defect used in Test B is one of the injectable invalid events, which links both levels of quality control.
 
 ---
 
@@ -242,6 +246,75 @@ dashboard. The same `'999'` department defect used in Test B is one of the injec
 
 ### 6.1 Dimensional model (unchanged)
 Fact constellation with two facts and conformed dimensions (full ERD in [`docs/resources/star_schema.mmd`](docs/resources/star_schema.mmd)).
+
+```mermaid
+erDiagram
+    DIM_DEPARTAMENTO ||--o{ DIM_COLEGIO : ubica
+    DIM_ANIO ||--o{ DIM_PERIODO : agrupa
+    DIM_COLEGIO ||--o{ FACT_RESULTADO_SABER11 : describe
+    DIM_GENERO  ||--o{ FACT_RESULTADO_SABER11 : describe
+    DIM_PERIODO ||--o{ FACT_RESULTADO_SABER11 : describe
+    DIM_DEPARTAMENTO ||--o{ FACT_INDICADOR_DEPARTAMENTO : describe
+    DIM_ANIO ||--o{ FACT_INDICADOR_DEPARTAMENTO : describe
+
+    DIM_DEPARTAMENTO {
+        int id_departamento PK
+        string cod_dane_depto UK "2 digitos, ej. 05"
+        string nombre_departamento
+    }
+
+    DIM_ANIO {
+        int id_anio PK
+        int anio UK
+    }
+
+    DIM_COLEGIO {
+        int id_colegio PK
+        int id_departamento FK
+        string cole_codigo_icfes
+        string cole_nombre_establecimiento
+        string cole_naturaleza
+        string cole_jornada
+        string cole_area_ubicacion
+        string cole_depto_ubicacion
+        string cole_mcpio_ubicacion
+    }
+
+    DIM_GENERO {
+        int id_genero PK
+        string estu_genero
+        string genero_descripcion
+    }
+
+    DIM_PERIODO {
+        int id_periodo PK
+        int id_anio FK
+        string periodo
+        int anio
+        int semestre
+    }
+
+    FACT_RESULTADO_SABER11 {
+        string estu_consecutivo PK
+        int id_periodo PK, FK
+        int id_colegio FK
+        int id_genero FK
+        float punt_lectura_critica
+        float punt_matematicas
+        float punt_sociales_ciudadanas
+        float punt_c_naturales
+        float punt_ingles
+        float punt_global
+        boolean puntaje_sospechoso
+    }
+
+    FACT_INDICADOR_DEPARTAMENTO {
+        int id_departamento PK, FK
+        int id_anio PK, FK
+        float desercion_media "porcentaje 0-100, no aditivo"
+        float repitencia_secundaria "porcentaje 0-100, no aditivo"
+    }
+```
 
 | Table | Grain | Key |
 |---|---|---|
@@ -254,7 +327,7 @@ Fact constellation with two facts and conformed dimensions (full ERD in [`docs/r
 Loading strategy: idempotent DDL (`CREATE TABLE IF NOT EXISTS`) → empty in reverse dependency order → dimensions → facts by period →
 reconciliation. Rates (`desercion_media`, `repitencia_secundaria`) are **non-additive**.
 
-### 6.2 Streaming store (new, `sql/schema/create_streaming.sql`)
+### 6.2 Streaming
 Same database, prefix `stream_` / `v_stream_`. Idempotent DDL, **no foreign keys** towards the DW, **not** part of the DW full refresh.
 
 | Object | Grain / purpose |
@@ -280,9 +353,9 @@ KPIs come from `sql/analytics/analytical_queries.sql`.
 
 | Page | Requirements | Insight |
 |---|---|---|
-| 1 — Baseline structural equity | R1, R2, R3 | Official vs. non-official gap, shift, top-10 urban–rural gaps |
-| 2 — Longitudinal departmental evolution | R4, R5 | Departmental ranking and gender gap over periods |
-| 3 — Integrated API analytics | R6 | Dropout vs. score by department and year |
+| 1  Baseline structural equity | R1, R2, R3 | Official vs. non-official gap, shift, top-10 urban–rural gaps |
+| 2  Longitudinal departmental evolution | R4, R5 | Departmental ranking and gender gap over periods |
+| 3  Integrated API analytics | R6 | Dropout vs. score by department and year |
 
 ![Page 1](docs/resources/Visualization-1.jpeg)
 ![Page 2](docs/resources/Visualization-2.jpeg)
@@ -296,7 +369,7 @@ subjects (§8.5).
 
 ## 8. Streaming Pipeline
 
-### 8.1 Event generation strategy (a simulation, clearly identified)
+### 8.1 Event generation strategy 
 The exam attempts already exist in the DW: there is no live feed. The **producer replays** records of `fact_resultado_saber11`
 (joined with its dimensions) as if they were arriving now. Every message has `event_type = saber11.result.replayed`.
 
@@ -352,7 +425,7 @@ Example of an event:
 ### 8.4 Why the key is `cod_dane_depto`
 Kafka guarantees order *within a partition*, so every event of a department is processed in order; it is the conformed key of the model
 (`dim_departamento`) and the grain of R3/R4/R6/R7. `estu_consecutivo` would distribute better but gives no useful ordering. Trade-off: partition skew
-(Bogotá, Antioquia, Valle carry far more events than Vaupés) — acceptable for 3 partitions and one consumer (see §12).
+(Bogotá, Antioquia, Valle carry far more events than Vaupés)  acceptable for 3 partitions and one consumer (see §12).
 
 ### 8.5 Streaming metrics (≥ 3 required; 7 delivered)
 
@@ -364,10 +437,10 @@ Eligibility inherited from the batch: suspicious scores never enter any score; o
 | M1 | Mean global score by department and year | `Σ punt_global / n` over non-suspicious events | SR1 · R4 |
 | M2 | Official gap | mean(`NO OFICIAL`) − mean(`OFICIAL`) | SR2 · R1 |
 | M3 | Urban–rural gap | mean(`URBANO`) − mean(`RURAL`) | SR2 · R3 |
-| M4 | Gender gap (M − F) in the **global score and the 5 subjects** (lectura crítica, matemáticas, sociales y ciudadanas, ciencias naturales, inglés) | national and by department | SR2 · R5 |
+| M4 | Gender gap (M − F) in the global score and the 5 subjects (lectura crítica, matemáticas, sociales y ciudadanas, ciencias naturales, inglés) | national and by department | SR2 · R5 |
 | M5 | Stream quality | valid / invalid / duplicates / % invalid, events per second, end-to-end latency, seconds without data | SR3 |
-| M6 | Score vs. **dropout** (MEN API) | live mean score against `desercion_media`, bivariate quadrant, Spearman ρ per year | SR4 · R6 |
-| M7 | Score vs. **repetition** (MEN API) | live mean score against `repitencia_secundaria`, quadrant, Spearman ρ | SR4 · R7 |
+| M6 | Score vs. dropout (MEN API) | live mean score against `desercion_media`, bivariate quadrant, Spearman ρ per year | SR4 · R6 |
+| M7 | Score vs. repetition (MEN API) | live mean score against `repitencia_secundaria`, quadrant, Spearman ρ | SR4 · R7 |
 
 **How the API enters the stream.** The consumer copies `fact_indicador_departamento` (+ `dim_departamento`) into `stream_referencia_*` at start-up and
 every 5 minutes (`STREAM_REFERENCE_REFRESH_SECONDS`), and keeps the previous snapshot if the DW is empty during a batch full refresh. The join happens at the
@@ -418,6 +491,8 @@ Kafka topic ──► consumer (micro-batch ≤ 1 s) ──► MySQL stream_* ta
 
 ### 9.3 Dashboard content (`http://localhost:3000`, variable *Año*)
 
+
+
 | Panels | Metric |
 |---|---|
 | 6 indicators: valid events, invalid (DLQ), duplicates, seconds without data, % invalid, latency (last minute) | M5 |
@@ -438,29 +513,30 @@ Kafka topic ──► consumer (micro-batch ≤ 1 s) ──► MySQL stream_* ta
 | Shows | Final values of 2021-2…2025-2 | **Partial** values that converge as events arrive, plus flow health |
 | Quality focus | Gates before loading | Invalid events, duplicates, freshness, latency |
 
-### 9.5 Main insights to look for during the demo
-These are what the dashboard is designed to show; the actual figures depend on the replayed sample, so they must be read from the live execution
-(§11.3), not from this document: (1) the cumulative gaps start noisy and **stabilise** as N grows; (2) departments with few events show unstable gaps (see the N column);
-(3) the quadrants and the Spearman ρ of M6/M7 reproduce, on the partial data, the association studied in R6/R7 (association, not causality);
-(4) invalid events and a stopped consumer are visible immediately in the quality indicators.
 
 ---
 
 ## 10. Execution and Reproducibility
 
 ### 10.1 Requirements
-Docker Desktop 24+ (≥ 4 GB RAM, 2 CPUs) · Git · Python 3.12 (only to run tests or scripts outside Docker) · Power BI Desktop (historical dashboard only).
-Ports: Airflow 8080 · MySQL 3307 · Kafka 9092 · Grafana 3000 · Kafka UI 8081 (optional).
+
 
 ### 10.2 Setup
 ```bash
-git clone <this repository> && cd Budget-To-Brilliance-Final
+git clone https://github.com/Bl4ck-Grimoire/Budget-To-Brilliance-3D.git # or also https://github.com/Johann0811/Budget-To-Brilliance-3D.git
+cd Budget-To-Brilliance-Final
 cp .env.example .env                       # defaults work for a local run; never commit .env
+# Create and activate virtual environment
+python -m venv .venv
+.venv\Scripts\activate
+# only install requirements.txt not requirements-streaming.txt 
+pip install -r requirements.txt
 # download the 9 ICFES .txt files from the Kaggle dataset (§2.1) into data/source/icfes/
 docker compose build
-docker compose up -d                       # postgres, mysql, Airflow, Kafka, topics, stream tables, consumer, Grafana
+docker compose up -d         # postgres, mysql, Airflow, Kafka, topics, stream tables, consumer, Grafana
 docker compose ps                          # everything running/healthy; stream-init and kafka-init end "Exited (0)"
 ```
+The first time you run docker compose up -d there will always be an ERROR in the streaming containers but this is controlled it will be solved after running the airflow dag (with the ICFES data inside its correponidng directory) after it finish running successfully you run again **docker compose up -d** and the streaming containers would be up and healthy. 
 
 ### 10.3 Batch (once, to fill the Data Warehouse)
 1. Open Airflow http://localhost:8080 → DAG `budget_to_brilliance_etl` → unpause → **Trigger**.
@@ -476,7 +552,7 @@ docker exec -it btb_mysql mysql -uroot -pchangeme icfes_dw -e "SELECT COUNT(*) F
 docker compose logs -f stream-consumer
 # 2. replay (simulation): 1% of period 2024-2 at 20 events/s
 docker compose run --rm stream-producer --period 2024-2 --sample-pct 1 --rate 20
-# 3. open Grafana: http://localhost:3000  (admin / admin by default, see .env) → dashboard "Saber 11 — Streaming en tiempo real"
+# 3. open Grafana: http://localhost:3000  (admin / admin by default, see .env) → dashboard "Saber 11  Streaming en tiempo real"
 # optional: Kafka UI
 docker compose --profile tools up -d kafka-ui        # http://localhost:8081
 ```
@@ -505,7 +581,7 @@ TEST_DATABASE_URL=mysql+pymysql://root:changeme@localhost:3307/icfes_dw_test pyt
 ```
 Never point `TEST_DATABASE_URL` at the real Data Warehouse.
 
-### 10.7 Configuration (all in `.env`, see `.env.example`)
+### 10.7 Configuration
 `KAFKA_*` (bootstrap, topics, group) · `STREAM_MAX_BATCH`, `STREAM_FLUSH_SECONDS`, `STREAM_BUCKET_SECONDS` (**must match** the dashboard variable `bucket_seconds`, default 10),
 `STREAM_REFERENCE_REFRESH_SECONDS` · `GRAFANA_DB_USER/PASSWORD` (read-only account) · `GRAFANA_ADMIN_*`. No credential is committed: `.env` is git-ignored and the defaults are for local use only.
 
@@ -523,13 +599,13 @@ Never point `TEST_DATABASE_URL` at the real Data Warehouse.
 
 | Evidence | Image |
 |---|---|
-| Test A — successful DAG execution | ![try-good](docs/resources/try-good.png) ![graph](docs/resources/try-good-graph.png) |
-| Test B — controlled critical failure (`'999'` department code in the API batch) halts the pipeline | ![try-bad](docs/resources/try-bad.png) ![logs](docs/resources/try-bad-logs.png) ![graph](docs/resources/try-bad-graph.png) |
-| Test C — safe re-run (idempotent full refresh) | ![rerun](docs/resources/rerun.png) ![graph](docs/resources/rerun-graph.png) |
+| Test A  successful DAG execution | ![try-good](docs/resources/try-good.png) ![graph](docs/resources/try-good-graph.png) |
+| Test B  controlled critical failure (`'999'` department code in the API batch) halts the pipeline | ![try-bad](docs/resources/try-bad.png) ![logs](docs/resources/try-bad-logs.png) ![graph](docs/resources/try-bad-graph.png) |
+| Test C  safe re-run (idempotent full refresh) | ![rerun](docs/resources/rerun.png) ![graph](docs/resources/rerun-graph.png) |
 
-### 11.2 Streaming: automated verification (executed during construction)
-[`docs/evidence/streaming/automated_tests.txt`](docs/evidence/streaming/automated_tests.txt) is the output of **62 passing tests**, run against MariaDB 10.11 configured
-with the default MySQL 8 `sql_mode` and a **synthetic** mini-DW with the exact shape of the real one. They verify, among others:
+### 11.2 Streaming: automated verification
+[`docs/evidence/streaming/automated_tests.txt`](docs/evidence/streaming/automated_tests.txt) is the output of 62 passing tests, run against MariaDB 10.11 configured
+with the default MySQL 8 `sql_mode` and a synthetic mini-DW with the exact shape of the real one. They verify, among others:
 
 * the contract (all fields required, null/out-of-range/wrong-type/semantic violations rejected, `is_simulation` absent) and the 8 injectable invalid-event kinds;
 * **equivalence with the batch**: the streaming M1 (department means), M2/M3 (national gaps) and M4 (gender gap in the 6 measures) equal the corresponding SQL computed directly on the fact table;
@@ -537,24 +613,16 @@ with the default MySQL 8 `sql_mode` and a **synthetic** mini-DW with the exact s
 * idempotency: replaying the same events, duplicates inside a batch, and a crash between the MySQL commit and the offset commit give the same result as a clean run;
 * invalid events are logged once (re-reading the same Kafka positions does not count them again), tombstones are rejected, a malformed message does not stop valid ones;
 * the DW full refresh does not touch `stream_*` tables (no FK, not in the truncate list) and the MEN snapshot survives it;
-* the read-only Grafana account can run **every query of every dashboard panel** (and cannot read DW tables).
+* the read-only Grafana account can run every query of every dashboard panel (and cannot read DW tables).
 
-These tests exercise the real consumer logic with simulated Kafka messages. They are **not** a substitute for the live run below.
+These tests exercise the real consumer logic with simulated Kafka messages. They are not a substitute for the live run below.
 
-### 11.3 Streaming: live-system evidence to capture (checklist)
-The assignment requires evidence of actual execution. Capture these while following §10 and save them in `docs/evidence/streaming/`
-(the file names below are suggestions); then link them here.
+### 11.3 Real-Time Dashboard
 
-| # | What it must show | Suggested file |
-|---|---|---|
-| 1 | `docker compose ps`: Kafka, consumer, Grafana running | `01_compose_ps.png` |
-| 2 | Airflow DAG green + `SELECT COUNT(*)` of both facts | `02_dag_dw.png` |
-| 3 | Producer log (`=== REPLAY SIMULATION ===`) and consumer log with `batch: … applied` lines | `03_producer_consumer_logs.png` |
-| 4 | Kafka UI (or `kafka-topics --describe`): topic, 3 partitions, messages | `04_kafka_topic.png` |
-| 5 | Grafana **before** the replay (counters at 0) and **during/after** (counters and gaps changing) | `05_dashboard_before.png`, `06_dashboard_after.png` |
-| 6 | Experiment 1: invalid events → *Invalid* indicator, rejections table, DLQ messages | `07_invalid_events.png` |
-| 7 | Experiment 2: consumer stopped (lag > 0, *Sin datos hace* high) and after restart (lag → 0, counts equal) | `08_consumer_stop.png`, `09_consumer_restart.png` |
-| 8 | The verification query of §10.5 (valid events = distinct event ids) | `10_no_loss.png` |
+![Page 4](docs/evidence/Visualization-4.jpeg)
+![Page 5](docs/evidence/Visualization-5.jpeg)
+![Page 6](docs/evidence/Visualization-6.jpeg)
+![Page 7](docs/evidence/Visualization-7.jpeg)
 
 ---
 
@@ -587,7 +655,7 @@ The assignment requires evidence of actual execution. Capture these while follow
 * **Quadrant thresholds** in the live view are the mean over the departments with data so far; if the Power BI quadrants use other cut-offs, align `v_stream_riesgo` with them.
 * **The DLQ message is best-effort** (sent after the MySQL commit); the durable record is `stream_eventos_invalidos`.
 * **Batch:** DAG is manually triggered (`schedule=None`), justified by the semi-annual/annual publication of the sources; DW load is a full refresh.
-* **Verification status of this repository:** the streaming logic, the SQL objects, the contract and all dashboard queries are covered by automated tests (§11.2). The Docker Compose stack (Kafka, Grafana provisioning, container wiring) and the Grafana dashboard rendering were **not** executed in the environment where the code was written (no Docker/Kafka available): YAML/JSON validity and image/tool versions must be confirmed on the first `docker compose up`.
+* **Verification status of this repository:** the streaming logic, the SQL objects, the contract and all dashboard queries are covered by automated tests. The Docker Compose stack (Kafka, Grafana provisioning, container wiring) and the Grafana dashboard rendering were not executed in the environment where the code was written (no Docker/Kafka available): YAML/JSON validity and image/tool versions must be confirmed on the first `docker compose up`.
 
 ### 12.3 Reliability and security considerations
 * No credentials in the repository: `.env` is ignored, `.env.example` has local defaults only (change them if any port is exposed).
@@ -618,6 +686,3 @@ The assignment requires evidence of actual execution. Capture these while follow
 ├── tests/                          # 62 tests (contract, metrics, consumer+SQL, dashboard queries)
 └── docs/{batch/README_2D.md, resources/, streaming_architecture.mmd, evidence/streaming/}
 ```
-
-**Team** (ETL Course G01, Faculty of Engineering and Basic Sciences, UAO): Juan David Lasso Chaparro · Johann Eduardo Gonzalez Sandoval
-*(add the remaining members and each one's contributions to the streaming component here).*
