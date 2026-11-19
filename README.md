@@ -335,21 +335,21 @@ Same database, prefix `stream_` / `v_stream_`. Idempotent DDL, **no foreign keys
 | `stream_referencia_departamento`, `stream_referencia_indicador` | snapshot of the MEN indicators copied from the DW |
 | `v_stream_departamento`, `v_stream_genero_depto`, `v_stream_genero_nacional`, `v_stream_riesgo(_base)`, `v_stream_spearman`, `v_stream_estado` | what Grafana reads (gaps, quadrants, Spearman, freshness) |
 
-The accumulators store **sums and counts**, not averages, so incremental means are exact; gaps are computed in the views.
+The accumulators store sums and counts, not averages, so incremental means are exact; gaps are computed in the views.
 The streaming department × year grain is the same *integration grain* of the 2D, so MEN rates join without fan-out.
 
 ---
 
 ## 7. Batch Analytical Dashboard
 
-Power BI connected **directly to the MySQL DW** (not to files). The `.pbix` is hosted in the Kaggle dataset above (size > 100 MB).
+Power BI connected directly to the MySQL DW (not to files). The `.pbix` is hosted in the Kaggle dataset above (size > 100 MB).
 KPIs come from `sql/analytics/analytical_queries.sql`.
 
 | Page | Requirements | Insight |
 |---|---|---|
 | 1  Baseline structural equity | R1, R2, R3 | Official vs. non-official gap, shift, top-10 urban–rural gaps |
 | 2  Longitudinal departmental evolution | R4, R5 | Departmental ranking and gender gap over periods |
-| 3  Integrated API analytics | R6 | Dropout vs. score by department and year |
+| 3  Integrated API analytics | R6, R7 | Dropout vs. score by department and year |
 
 ![Page 1](docs/resources/Visualization-1.jpeg)
 ![Page 2](docs/resources/Visualization-2.jpeg)
