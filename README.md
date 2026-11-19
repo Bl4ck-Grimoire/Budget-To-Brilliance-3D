@@ -21,7 +21,7 @@
 10. [Execution and Reproducibility](#10-execution-and-reproducibility)
 11. [Functional Evidence](#11-functional-evidence)
 12. [Engineering Decisions and Limitations](#12-engineering-decisions-and-limitations)
-13. [Repository structure and team](#13-repository-structure-and-team)
+13. [Repository structure](#13-repository-structure)
 
 ---
 
