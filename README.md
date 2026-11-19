@@ -310,7 +310,7 @@ erDiagram
     }
 ```
 
-| Table | Grain | Key |
+| Table | Grain/PK | Key |
 |---|---|---|
 | `fact_resultado_saber11` | one exam attempt of one student in one semester | `(estu_consecutivo, id_periodo)` |
 | `fact_indicador_departamento` | one DANE department in one calendar year | `(id_departamento, id_anio)` |
@@ -654,7 +654,7 @@ These tests exercise the real consumer logic with simulated Kafka messages. They
 
 ---
 
-## 13. Repository structure and team
+## 13. Repository structure
 
 ```text
 .
